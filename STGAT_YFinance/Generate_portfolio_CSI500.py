@@ -8,7 +8,7 @@ import warnings
 warnings.filterwarnings("ignore")
 # from Agent_SL import GCN, SGFormer, TCN_Net
 from STGAT_tsd import GAT_TCN
-from gen_data_tsd import gen_GNN_data
+from gen_data_tsd import gen_GNN_data, YFConfig
 plt.rcParams['font.sans-serif'] = ['SimHei']	# 显示中文
 plt.rcParams['axes.unicode_minus'] = False		# 显示负号
 current_path = os.path.dirname(os.path.abspath(__file__)) # 获取当前脚本所在的项目根目录
@@ -37,7 +37,11 @@ parser.add_argument('--checkpoint', default=None)
 parser.add_argument('--refresh', action='store_true')
 args = parser.parse_args()
 # device = "cpu"
-Gdata_list, split, max_value, min_value = gen_GNN_data(YFConfig(start=args.start, end=args.end, tickers_file=args.tickers_file, refresh=args.refresh))
+Gdata_list, split, max_value, min_value = gen_GNN_data(YFConfig(start=args.start, end=args.end, tickers_file=args.tickers_file, refresh=args.refresh)
+# Infer number of nodes (tickers) from dataset
+num_nodes = int(Gdata_list[0].shouchujia.shape[0])
+print('Detected num_nodes:', num_nodes)
+)
 
 data_set = Gdata_list
 dataset_size = len(data_set)
@@ -103,9 +107,9 @@ def predict_and_calculate(model, data_loader):
             y = data.shouchujia.reshape(-1, num_nodes)
             all_true.extend(y.cpu().numpy().tolist())
             all_predictions.extend(out.cpu().numpy().tolist())
-            all_gourujia.extend(data.gourujia.reshape(-1, 300).cpu().numpy().tolist())
-            all_std_dev_next.extend(data.std_dev_next.reshape(-1, 300).cpu().numpy().tolist())
-            all_zhangting.extend(data.zhangting.reshape(-1, 300).cpu().numpy().tolist())
+            all_gourujia.extend(data.gourujia.reshape(-1, num_nodes).cpu().numpy().tolist())
+            all_std_dev_next.extend(data.std_dev_next.reshape(-1, num_nodes).cpu().numpy().tolist())
+            all_zhangting.extend(data.zhangting.reshape(-1, num_nodes).cpu().numpy().tolist())
             all_zhishu.extend(data.zzzs)
             # all_Nasdaq_zhishu.extend(data.Nasdaq_zhishu)
             # all_DJIA_zhishu.extend(data.DJIA_zhishu)

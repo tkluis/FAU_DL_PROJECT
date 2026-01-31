@@ -8,9 +8,12 @@ import warnings
 warnings.filterwarnings("ignore")
 # from Agent_SL import GCN, SGFormer, TCN_Net
 from STGAT_tsd import GAT_TCN
-from gen_data_tsd import gen_GNN_data
-plt.rcParams['font.sans-serif'] = ['SimHei']	# 显示中文
-plt.rcParams['axes.unicode_minus'] = False		# 显示负号
+from gen_data_tsd import gen_GNN_data, YFConfig
+
+import matplotlib as mpl
+mpl.rcParams['font.family'] = 'DejaVu Sans'   # default Matplotlib font
+mpl.rcParams['axes.unicode_minus'] = False
+
 current_path = os.path.dirname(os.path.abspath(__file__)) # 获取当前脚本所在的项目根目录
 root_path = os.path.dirname(current_path)
 print("项目根目录路径：", root_path)
@@ -35,6 +38,10 @@ parser.add_argument('--checkpoint', default=None)
 parser.add_argument('--refresh', action='store_true')
 args = parser.parse_args()
 Gdata_list, split, max_value, min_value = gen_GNN_data(YFConfig(start=args.start, end=args.end, tickers_file=args.tickers_file, refresh=args.refresh))
+# Infer number of nodes (tickers) from dataset
+num_nodes = int(Gdata_list[0].shouchujia.shape[0])
+print('Detected num_nodes:', num_nodes)
+
 data_set = Gdata_list
 dataset_size = len(data_set)
 train_ratio = 0.15  # 训练集占的比例
@@ -58,10 +65,15 @@ gat = GAT_TCN(num_nodes, 1, 128, 1, 3, 2, 3)
 model = gat.to(device)
 # 加载训练好的模型权重
 best_model = gat.to(device)
-best_import os
 ckpt_path = args.checkpoint if args.checkpoint else r'best_model_gat_tcn_US_fixed2.pt'
 if not os.path.exists(ckpt_path):
     raise FileNotFoundError(f"Checkpoint not found: {ckpt_path}. Train first or pass --checkpoint.")
+# Load checkpoint
+ckpt_path = args.checkpoint
+if ckpt_path is None:
+    raise FileNotFoundError('Checkpoint not provided. Use --checkpoint path/to/model.pt')
+if not os.path.exists(ckpt_path):
+    raise FileNotFoundError(f'Checkpoint not found: {ckpt_path}')
 model.load_state_dict(torch.load(ckpt_path, map_location=device))
 
 def predict_and_calculate(model, data_loader):
@@ -83,9 +95,9 @@ def predict_and_calculate(model, data_loader):
             y = data.shouchujia.reshape(-1, num_nodes)
             all_true.extend(y.cpu().numpy().tolist())
             all_predictions.extend(out.cpu().numpy().tolist())
-            all_gourujia.extend(data.gourujia.reshape(-1, 300).cpu().numpy().tolist())
-            all_std_dev_next.extend(data.std_dev_next.reshape(-1, 300).cpu().numpy().tolist())
-            all_zhangting.extend(data.zhangting.reshape(-1, 300).cpu().numpy().tolist())
+            all_gourujia.extend(data.gourujia.reshape(-1, num_nodes).cpu().numpy().tolist())
+            all_std_dev_next.extend(data.std_dev_next.reshape(-1, num_nodes).cpu().numpy().tolist())
+            all_zhangting.extend(data.zhangting.reshape(-1, num_nodes).cpu().numpy().tolist())
             all_zhishu.extend(data.biaopuzhishu)
             all_Nasdaq_zhishu.extend(data.Nasdaq_zhishu)
             all_DJIA_zhishu.extend(data.DJIA_zhishu)
@@ -177,7 +189,6 @@ val_top_stocks, val_shares = select_top_stocks_and_calculate_shares(val_portfoli
 test_top_stocks, test_shares = select_top_stocks_and_calculate_shares(test_portfolio_value, test_gourujia, test_predictions,true_test_portfolio_value, true_test_earnings_rate, '../output/test')
 print("每个交易日组合价值最高的10只股票及其份额比例已保存到CSV文件。")
 
-import os
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
@@ -318,11 +329,11 @@ plt.show()
 
 
 # 确保所有数据都是一维数组或列表
-riqi_test = list(riqi_test.reshape(25))
+riqi_test = list(riqi_test.reshape(-1))
 earnings_rate_values = list(test_earnings_rate_dict_true.values())
-biaopuzhishu_test = list(biaopuzhishu_test.reshape(25))
-Nasdaq_zhishu_test = list(Nasdaq_zhishu_test.reshape(25))
-DJIA_zhishu_test = list(DJIA_zhishu_test.reshape(25))
+biaopuzhishu_test = list(biaopuzhishu_test.reshape(-1))
+Nasdaq_zhishu_test = list(Nasdaq_zhishu_test.reshape(-1))
+DJIA_zhishu_test = list(DJIA_zhishu_test.reshape(-1))
 
 # 将每日收益率保存到CSV文件
 test_daily_rates_df = pd.DataFrame({
