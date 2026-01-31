@@ -115,7 +115,7 @@ These scripts require a trained checkpoint. By default they look for the origina
 Example:
 
 ```bash
-python Generate_portfolio_S&P500.py --tickers_file tickers.txt --start 2018-01-01 --end 2024-12-31 --checkpoint best_model.pt
+python Generate_portfolio_SP500.py --tickers_file tickers.txt --start 2018-01-01 --end 2024-12-31 --checkpoint best_model.pt
 ```
 
 If the checkpoint is missing, the script will raise a clear error and tell you to train first.
@@ -149,3 +149,18 @@ If the checkpoint is missing, the script will raise a clear error and tell you t
 - `Generate_portfolio_CSI500.py` : portfolio script (patched for yfinance + CLI args)
 - `scripts/fetch_yf.py` : downloader to build cache
 
+
+## Troubleshooting: yfinance `OperationalError('database is locked')`
+
+If you see a message like:
+
+- `Failed download: ... OperationalError('database is locked')`
+
+it is typically caused by yfinance's internal caching interacting with threaded downloads.
+This repo disables threading for downloads and retries failed tickers one-by-one in `scripts/fetch_yf.py`.
+If it still happens, close other Python processes using yfinance, restart your kernel/terminal session, and rerun the fetch.
+
+
+## Python version note
+
+This project is tested most reliably on **Python 3.11 or 3.12**. Using bleeding-edge or pre-release Python versions (e.g., 3.13/3.14) can cause incompatibilities with PyTorch / PyTorch Geometric.

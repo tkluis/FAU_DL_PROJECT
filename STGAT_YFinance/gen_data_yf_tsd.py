@@ -10,6 +10,24 @@ import pandas as pd
 import torch
 from torch_geometric.data import Data
 
+class FlatWindowData(Data):
+    """PyG Data subclass for flattened node-time tensors.
+
+    The original STGAT code stores `x` and `r` as flattened tensors of shape
+    (num_nodes * window, 1). PyG batching would otherwise infer num_nodes from
+    x.size(0), which is incorrect for graph connectivity (edge_index expects num_nodes).
+
+    This class forces edge_index increments to use `self.num_nodes`.
+    """
+    def __inc__(self, key, value, *args, **kwargs):
+        if key == "edge_index":
+            # Ensure batching offsets edges by the true number of graph nodes.
+            if self.num_nodes is None:
+                raise RuntimeError("FlatWindowData.num_nodes must be set for batching.")
+            return int(self.num_nodes)
+        return super().__inc__(key, value, *args, **kwargs)
+
+
 try:
     import yfinance as yf
 except Exception as e:
@@ -85,7 +103,7 @@ def download_or_load_yf(
         interval="1d",
         group_by="ticker",
         auto_adjust=False,
-        threads=True,
+        threads=False,
         progress=False,
     )
 
@@ -288,7 +306,7 @@ def gen_GNN_data(cfg: Optional[YFConfig] = None) -> Tuple[List[Data], float, flo
         std_next = feats["ret"].reindex(w_idx).std(axis=0).values.astype(np.float32)  # (N,)
         zhangting = np.zeros((num_nodes,), dtype=np.float32)  # not applicable; keep for compatibility
 
-        data = Data(
+        data = FlatWindowData(num_nodes=num_nodes, 
             x=torch.from_numpy(x_flat),
             r=torch.from_numpy(r_flat),
             t=torch.from_numpy(t_mat),
@@ -305,6 +323,7 @@ def gen_GNN_data(cfg: Optional[YFConfig] = None) -> Tuple[List[Data], float, flo
             Nasdaq_zhishu=torch.tensor(idx_ret(nasdaq, day), dtype=torch.float32),
             zzzs=torch.tensor(idx_ret(csi, day), dtype=torch.float32),
         )
+        data.num_nodes = num_nodes
         Gdata_list.append(data)
 
     return Gdata_list, split, max_value, min_value

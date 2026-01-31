@@ -158,7 +158,6 @@ out_channels = 304
 # TCN = TCN_Net(in_size,hidden_channels,split)
 # gcn = GCN(in_channels,Ghidden_channels,Gout_put_channels).to(device)
 # model = SGFormer(in_channels, hidden_channels, out_channels, aggregate, gcn, TCN).to(device)
-gat = None  # will be created after data is loaded
 # optimizer = optim.SGD(model.parameters(), lr=0.001, momentum=0.5)
 criterion_2 = nn.L1Loss()
 criterion = torch.nn.MSELoss()
@@ -173,7 +172,7 @@ criterion = torch.nn.MSELoss()
 #     {'params': model.params2},
 #     {'params': model.params3},
 #     {'params': model.params4}], lr=lr, betas=(0.9, 0.999), eps=1e-08, weight_decay=0)
-# scheduler = ReduceLROnPlateau(optimizer, mode='min', factor=0.9, patience=7, verbose=True)
+# scheduler = ReduceLROnPlateau(optimizer, mode='min', factor=0.9, patience=7)
 
 # 梯度累计参数
 accumulation_steps = 4
@@ -252,7 +251,7 @@ for fold, (train_idx, val_idx) in enumerate(kf.split(train_dataset_all)):
 
     model = gat.to(device)
     optimizer = optim.Adam(model.parameters(), lr=lr, betas=(0.9, 0.999), eps=1e-08, weight_decay=0)
-    scheduler = ReduceLROnPlateau(optimizer, mode='min', factor=0.9, patience=7, verbose=True)
+    scheduler = ReduceLROnPlateau(optimizer, mode='min', factor=0.9, patience=7)
 
     for epoch in range(epochs):  # number of epochs
         train_loss = train()
