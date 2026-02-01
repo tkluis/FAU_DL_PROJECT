@@ -117,20 +117,41 @@ def download_or_load_yf(
     return df
 
 
-def extract_panel(df: pd.DataFrame, field: str, tickers: List[str]) -> pd.DataFrame:
-    field_map = {
+def extract_panel(df: pd.DataFrame, field: str, tickers: list) -> pd.DataFrame:
+    """
+    Extract a wide panel with index=date and columns=tickers for a given field.
+    Expects df.columns MultiIndex ordered as (Ticker, Price), where Price includes:
+    Open, High, Low, Close, Adj Close, Volume.
+    """
+    if not isinstance(df.columns, pd.MultiIndex):
+        raise ValueError("Expected MultiIndex columns (Ticker, Price) in cached yf parquet.")
+
+    # Normalize field name to match parquet ("Close", "Adj Close", "Open", ...)
+    # Allow passing 'close'/'adj close' etc.
+    field_norm = field.strip().lower()
+    mapping = {
         "open": "Open",
         "high": "High",
         "low": "Low",
         "close": "Close",
+        "adj close": "Adj Close",
+        "adj_close": "Adj Close",
         "adjclose": "Adj Close",
         "volume": "Volume",
     }
-    key = field_map[field.lower()]
-    cols = [(t, key) for t in tickers if (t, key) in df.columns]
-    panel = df[cols].copy()
-    panel.columns = [c[0] for c in panel.columns]
-    return panel
+    if field_norm not in mapping:
+        raise KeyError(f"Unknown field '{field}'. Expected one of: {list(mapping.keys())}")
+
+    field_name = mapping[field_norm]
+
+    # Select only columns that exist (some tickers can still be missing a field)
+    cols = [(t, field_name) for t in tickers if (t, field_name) in df.columns]
+    if len(cols) == 0:
+        raise KeyError(f"No columns found for field '{field_name}'. Check parquet schema and tickers.")
+
+    sub = df.loc[:, cols].copy()
+    sub.columns = [c[0] for c in sub.columns]  # flatten to tickers only
+    return sub
 
 
 def compute_features(close: pd.DataFrame, volume: pd.DataFrame) -> Dict[str, pd.DataFrame]:
@@ -173,7 +194,7 @@ def build_correlation_graph(returns: np.ndarray, top_k: int = 10) -> Tuple[torch
 @dataclass
 class YFConfig:
     start: str = "2018-01-01"
-    end: str = "2024-12-31"
+    end: str = "2026-01-31"
     window: int = 20
     horizon: int = 1
     top_k: int = 10
@@ -187,6 +208,18 @@ class YFConfig:
     idx_djia: str = "DIA"
     idx_nasdaq: str = "QQQ"
     idx_csi_proxy: str = "FXI"  # proxy ETF for China large-cap (optional)
+
+def filter_available_tickers(panel_df, tickers, label="panel"):
+    """Keep only tickers that exist as columns in panel_df; print what was removed."""
+    available = set(panel_df.columns.tolist())
+    missing = [t for t in tickers if t not in available]
+    if missing:
+        print(f"[WARN] {label}: dropping {len(missing)} tickers missing after cleaning.")
+        print(f"       Example missing: {missing[:25]}")
+    kept = [t for t in tickers if t in available]
+    if len(kept) < 2:
+        raise RuntimeError(f"Too few tickers left after filtering for {label}.")
+    return kept, missing
 
 
 def gen_GNN_data(cfg: Optional[YFConfig] = None) -> Tuple[List[Data], float, float, float]:
@@ -234,10 +267,22 @@ def gen_GNN_data(cfg: Optional[YFConfig] = None) -> Tuple[List[Data], float, flo
     open_all = open_all.reindex(close_all.index).ffill()
     vol_all = vol_all.reindex(close_all.index).ffill()
 
-    # Stock-only panels
+    # After safe_panel/dropna logic, some tickers may no longer exist as columns.
+    stock_tickers, dropped = filter_available_tickers(close_all, stock_tickers, label="close_all")
+
+    if dropped:
+        with open("output/dropped_tickers.txt", "w") as f:
+            f.write("\n".join(dropped) + "\n")
+        print("[INFO] Wrote dropped tickers to output/dropped_tickers.txt")
+
+    # Ensure other panels match the same ticker set (avoid downstream mismatch)
+    open_all = open_all.reindex(index=close_all.index, columns=stock_tickers).ffill()
+    vol_all  = vol_all.reindex(index=close_all.index, columns=stock_tickers).ffill()
+
+    # Now safe to subset
     close = close_all[stock_tickers].copy()
     open_ = open_all[stock_tickers].copy()
-    vol = vol_all[stock_tickers].copy()
+    vol   = vol_all[stock_tickers].copy()
 
     # Index series (used by portfolio scripts)
     def idx_series(ticker: str) -> pd.Series:
